@@ -6,6 +6,7 @@ import (
 )
 
 type configFlags struct {
+	PrivateKey string `long:"private-key" short:"p" description:"The private key (encoded in hex)"`
 	config.NetworkFlags
 }
 
