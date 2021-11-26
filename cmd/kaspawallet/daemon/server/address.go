@@ -11,6 +11,10 @@ import (
 )
 
 func (s *server) changeAddress() (util.Address, error) {
+	if s.isPublicAddressUsed {
+		return s.publicAddress, nil
+	}
+
 	err := s.keysFile.SetLastUsedInternalIndex(s.keysFile.LastUsedInternalIndex() + 1)
 	if err != nil {
 		return nil, err
@@ -39,20 +43,24 @@ func (s *server) ShowAddresses(_ context.Context, request *pb.ShowAddressesReque
 	}
 
 	addresses := make([]string, 0)
-	for i := uint32(1); i <= s.keysFile.LastUsedExternalIndex(); i++ {
-		walletAddr := &walletAddress{
-			index:         i,
-			cosignerIndex: s.keysFile.CosignerIndex,
-			keyChain:      libkaspawallet.ExternalKeychain,
-		}
-		path := s.walletAddressPath(walletAddr)
-		address, err := libkaspawallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
-		if err != nil {
-			return nil, err
-		}
-		addresses = append(addresses, address.String())
-	}
 
+	if s.isPublicAddressUsed {
+		addresses = append(addresses, s.publicAddress.String())
+	} else {
+		for i := uint32(1); i <= s.keysFile.LastUsedExternalIndex(); i++ {
+			walletAddr := &walletAddress{
+				index:         i,
+				cosignerIndex: s.keysFile.CosignerIndex,
+				keyChain:      libkaspawallet.ExternalKeychain,
+			}
+			path := s.walletAddressPath(walletAddr)
+			address, err := libkaspawallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
+			if err != nil {
+				return nil, err
+			}
+			addresses = append(addresses, address.String())
+		}
+	}
 	return &pb.ShowAddressesResponse{Address: addresses}, nil
 }
 
@@ -62,6 +70,10 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 
 	if !s.isSynced() {
 		return nil, errors.New("server is not synced")
+	}
+
+	if s.isPublicAddressUsed {
+		return &pb.NewAddressResponse{Address: s.publicAddress.String()}, nil
 	}
 
 	err := s.keysFile.SetLastUsedExternalIndex(s.keysFile.LastUsedExternalIndex() + 1)
@@ -89,6 +101,9 @@ func (s *server) NewAddress(_ context.Context, request *pb.NewAddressRequest) (*
 }
 
 func (s *server) walletAddressString(wAddr *walletAddress) (string, error) {
+	if s.isPublicAddressUsed {
+		return s.publicAddress.String(), nil
+	}
 	path := s.walletAddressPath(wAddr)
 	addr, err := libkaspawallet.Address(s.params, s.keysFile.ExtendedPublicKeys, s.keysFile.MinimumSignatures, path, s.keysFile.ECDSA)
 	if err != nil {
